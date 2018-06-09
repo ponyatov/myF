@@ -1,5 +1,6 @@
 
 import os,sys
+from twisted.internet import wxreactor
 
 SRC = open(sys.argv[0]+'.src','r').read()
 
@@ -23,12 +24,15 @@ class Qbject:
     
     def __setitem__(self,key,o): self.attr[key] = o ; return self
     def __getitem__(self,key): return self.attr[key]
+    
     def __lshift__(self,o): return self.push(o)
     def push(self,o): self.nest.append(o) ; return self
     def pop(self): return self.nest.pop()
     def top(self): return self.nest[-1]
     
-class Primitive(Qbject): pass
+class Primitive(Qbject):
+    def __call__(self): D << self
+    
 class Symbol(Primitive): pass
 class String(Primitive): pass
 class Number(Primitive):
@@ -43,10 +47,11 @@ class Map(Container):
 
 class Active(Qbject): pass
 class Function(Active):
-    def __init__(self,F):
-        Active.__init__(self, F.__name__)
-        self.fn = F
+    def __init__(self,F): Active.__init__(self, F.__name__) ; self.fn = F
+    def __call__(self): self.fn()
 class VM(Function): ' VM command '
+class Clazz(Active): pass
+class Method(Function): pass
 
 D = Stack('DATA')
 W = Map('FORTH')
@@ -67,17 +72,21 @@ def BYE(): sys.exit(0)
 
 import ply.lex as lex
 
-tokens = ['symbol','number']
+tokens = ['symbol','number','integer']
 
 t_ignore = ' \t\r\n'
 t_ignore_COMMENT = '\#.*\n'
 
 def t_number(t):
-    r'[\+\-]?[0-9]+(\.[0-9]*)?([eE][\+\-]?[0-9]+)?'
+    r'[\+\-]?([0-9]+\.[0-9]*|[0-9]*\.[0-9]+)([eE][\+\-]?[0-9]+)?'
     return Number(t.value)
 
+def t_integer(t):
+    r'[\+\-]?[0-9]+'
+    return Integer(t.value)
+
 def t_symbol(t):
-    r'[a-zA-Z0-9_]+'
+    r'[a-zA-Z0-9_\.]+'
     return Symbol(t.value)
 
 def t_error(t): raise SyntaxError(t)
@@ -93,13 +102,16 @@ W << WORD
 def FIND(): return W[D.pop().value]
 W << FIND
 
+def EXECUTE(): D.pop()()
+W << EXECUTE
+
 def INTERPRET(src=SRC):
     lexer.input(src)
     while True:
         WORD()
         if not WORD(): break;
         if D.top().type in ['symbol']: FIND()
-        print D
+        EXECUTE()
     qq()
 W << INTERPRET
 INTERPRET(SRC)
