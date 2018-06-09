@@ -1,4 +1,15 @@
 # stage S0 -> S1
 
- 1 2.3 4.e-5 
- 
+## interpreter tests
+
+### line comment
+\\\ can start with classic FORTH \ backslash
+((( or inline comments in parens /no recursion/ ) 
+
+-01 +002.3 4.e-5 .		\ numbers
+ 0xDeadBeef 0b1101 .	\ machine hex/bin
+'string'			.	\ string constant
+
+## next stage file generation
+
+STAGE ??

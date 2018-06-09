@@ -1,6 +1,5 @@
 
 import os,sys
-from twisted.internet import wxreactor
 
 SRC = open(sys.argv[0]+'.src','r').read()
 
@@ -12,6 +11,7 @@ class Qbject:
         self.nest = []
         
     def __repr__(self): return self.dump()
+    def str(self): return str(self.value)
     def dump(self,depth=0,prefix=''):
         S = self.pad(depth) + self.head(prefix)
         for i in self.attr:
@@ -19,7 +19,7 @@ class Qbject:
         for j in self.nest:
             S += j.dump(depth+1)
         return S
-    def head(self,prefix=''): return '%s<%s:%s>' % (prefix, self.type, self.value)
+    def head(self,prefix=''): return '%s<%s:%s>' % (prefix, self.type, self.str())
     def pad(self,N): return '\n'+'\t'*N
     
     def __setitem__(self,key,o): self.attr[key] = o ; return self
@@ -29,16 +29,25 @@ class Qbject:
     def push(self,o): self.nest.append(o) ; return self
     def pop(self): return self.nest.pop()
     def top(self): return self.nest[-1]
+    def clear(self): self.nest = [] ; return self
     
 class Primitive(Qbject):
     def __call__(self): D << self
     
 class Symbol(Primitive): pass
-class String(Primitive): pass
+class String(Primitive):
+    def str(self): return "'%s'" % self.value
+
 class Number(Primitive):
     def __init__(self,V): Primitive.__init__(self, float(V))
 class Integer(Number):
     def __init__(self,V): Primitive.__init__(self, int(V))
+class Hex(Integer):
+    def __init__(self,V): Primitive.__init__(self, int(V[2:],0x10))
+    def str(self): return '0x%X' % self.value
+class Bin(Integer):
+    def __init__(self,V): Primitive.__init__(self, int(V[2:],0x02))
+    def str(self): return '0b{0:b}'.format(self.value)
 
 class Container(Qbject): pass    
 class Stack(Container): pass
@@ -50,6 +59,8 @@ class Function(Active):
     def __init__(self,F): Active.__init__(self, F.__name__) ; self.fn = F
     def __call__(self): self.fn()
 class VM(Function): ' VM command '
+#     def __init__(self,F): Function.__init__(self,F)
+    
 class Clazz(Active): pass
 class Method(Function): pass
 
@@ -57,6 +68,9 @@ D = Stack('DATA')
 W = Map('FORTH')
 
 W['STAGE'] = Integer(0)
+
+def dot(): D.clear()
+W['.'] = VM(dot)
 
 def q(): print D
 W['?'] = VM(q)
@@ -72,10 +86,32 @@ def BYE(): sys.exit(0)
 
 import ply.lex as lex
 
-tokens = ['symbol','number','integer']
+tokens = ['symbol','number','integer','hex','bin','string']
+states = (('string','exclusive'),)
+
+t_string_ignore = ''
+def t_string(t):
+    r'\''
+    t.lexer.lexstring = ''
+    t.lexer.push_state('string')
+def t_string_string(t):
+    r'\''
+    t.lexer.pop_state()
+    return String(t.lexer.lexstring)
+def t_string_char(t):
+    r'.'
+    t.lexer.lexstring += t.value
 
 t_ignore = ' \t\r\n'
-t_ignore_COMMENT = '\#.*\n'
+t_ignore_COMMENT = '[\\\#].*\n|\(.*\)'
+
+def t_hex(t):
+    r'0x[0-9a-fA-F]+'
+    return Hex(t.value)
+
+def t_bin(t):
+    r'0b[01]+'
+    return Bin(t.value)
 
 def t_number(t):
     r'[\+\-]?([0-9]+\.[0-9]*|[0-9]*\.[0-9]+)([eE][\+\-]?[0-9]+)?'
@@ -86,10 +122,10 @@ def t_integer(t):
     return Integer(t.value)
 
 def t_symbol(t):
-    r'[a-zA-Z0-9_\.]+'
+    r'[a-zA-Z0-9_\.\?]+'
     return Symbol(t.value)
 
-def t_error(t): raise SyntaxError(t)
+def t_ANY_error(t): raise SyntaxError(t)
 
 lexer = lex.lex()
 
@@ -99,10 +135,10 @@ def WORD():
     return token
 W << WORD
 
-def FIND(): return W[D.pop().value]
+def FIND(): D << W[D.pop().value]
 W << FIND
 
-def EXECUTE(): D.pop()()
+def EXECUTE(): D.pop() ()
 W << EXECUTE
 
 def INTERPRET(src=SRC):
@@ -110,7 +146,7 @@ def INTERPRET(src=SRC):
     while True:
         WORD()
         if not WORD(): break;
-        if D.top().type in ['symbol']: FIND()
+        if D.top().type in ['symbol']: FIND() ; print D.pop()
         EXECUTE()
     qq()
 W << INTERPRET
