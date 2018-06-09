@@ -31,15 +31,17 @@ class Qbject:
     def top(self): return self.nest[-1]
     def clear(self): self.nest = [] ; return self
     
-class Primitive(Qbject):
-    def __call__(self): D << self
+class Primitive(Qbject): pass
+#     def __call__(self): D << self
     
 class Symbol(Primitive): pass
 class String(Primitive):
     def str(self): return "'%s'" % self.value
+    def __call__(self): D << self
 
 class Number(Primitive):
     def __init__(self,V): Primitive.__init__(self, float(V))
+    def __call__(self): D << self
 class Integer(Number):
     def __init__(self,V): Primitive.__init__(self, int(V))
 class Hex(Integer):
@@ -49,7 +51,7 @@ class Bin(Integer):
     def __init__(self,V): Primitive.__init__(self, int(V[2:],0x02))
     def str(self): return '0b{0:b}'.format(self.value)
 
-class Container(Qbject): pass    
+class Container(Qbject): pass
 class Stack(Container): pass
 class Map(Container):
     def __lshift__(self,o): F = VM(o) ; self.attr[F.value] = F
@@ -59,7 +61,6 @@ class Function(Active):
     def __init__(self,F): Active.__init__(self, F.__name__) ; self.fn = F
     def __call__(self): self.fn()
 class VM(Function): ' VM command '
-#     def __init__(self,F): Function.__init__(self,F)
     
 class Clazz(Active): pass
 class Method(Function): pass
@@ -82,7 +83,7 @@ def qq(): q() ; wq() ; BYE()
 W['??'] = VM(qq)
 
 def BYE(): sys.exit(0)
-# W << BYE
+W << BYE
 
 import ply.lex as lex
 
@@ -135,7 +136,7 @@ def WORD():
     return token
 W << WORD
 
-def FIND(): D << W[D.pop().value]
+def FIND(): name = D.pop().value ; D << W[name]
 W << FIND
 
 def EXECUTE(): D.pop() ()
@@ -146,8 +147,9 @@ def INTERPRET(src=SRC):
     while True:
         WORD()
         if not WORD(): break;
-        if D.top().type in ['symbol']: FIND() ; print D.pop()
+        if D.top().type in ['symbol']: 'FIND()'
         EXECUTE()
+        q()
     qq()
 W << INTERPRET
 INTERPRET(SRC)
